@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { App } = require('@slack/bolt');
 const axios = require('axios');
+const { Configuration, OpenAIApi } = require('openai');
 
 const app = new App({
   token: process.env.SLACK_APP_BOT_TOKEN,
@@ -9,46 +10,31 @@ const app = new App({
   signingSecret: process.env.SLACK_APP_SIGNING_SECRET,
 });
 
-const openaiApiKey = process.env.OPENAI_API_KEY;
-const openaiApiUrl = process.env.OPENAI_API_URL;
+// Initialize the OpenAI API client
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
 
-// with ChatGPT
+// Listen for the 'message' event
+app.message(async ({ message, say }) => {
+  try {
+    // Use the OpenAI API to generate a response based on the user's message
+    const response = await openai.createCompletion({
+      model: 'text-davinci-003',
+      prompt: message.text,
+      max_tokens: 50,
+      temperature: 0.5,
+    });
 
-app.message(async ({ message, say, options }) => {
-  const text = message.text;
-  // Send the user's message to OpenAI for processing
-  if (!text || text.trim() === '') {
-    await say('Please provide a message to process');
-    return;
+    // Send the response back to the user in Slack
+    await say(response.data.choices[0].text);
+  } catch (err) {
+    console.error(err);
   }
-  const response = await axios.post(
-    openaiApiUrl,
-    {
-      prompt: text,
-      max_tokens: 150,
-      n: 1,
-      stop: '\n',
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
-
-  // Get the response from OpenAI and send it back to the user
-  const result = response.data.choices[0].text.trim();
-  await say(result);
 });
 
-// withou chatGPT
-// app.message(async ({ message, say }) => {
-//   // Respond with the user's message
-//   await say(`You said: ${message.text}`);
-// });
-
 (async () => {
-  console.log('Slack GPT is working...');
-  await app.start(8000);
+  console.log('⚡️ Bolt app is running!');
+  await app.start(process.env.PORT || 3000);
 })();
